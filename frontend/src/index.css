@@ -4,11 +4,11 @@
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-gray-800;
   }
   
   body {
-    @apply bg-dark-bg text-foreground;
+    @apply bg-dark-bg text-white;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
   
@@ -54,7 +54,7 @@
   
   /* 버튼 기본 스타일 */
   .btn {
-    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-dark-bg;
+    @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-900;
   }
   
   .btn-primary {

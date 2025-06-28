@@ -143,7 +143,18 @@ export const useMeetingStore = create<MeetingState & MeetingActions>()(
 
       // 연결 관리
       connect: () => {
-        set({ isReconnecting: true })
+        // 이미 연결되어 있으면 바로 성공 처리
+        if (socketService.isConnected()) {
+          set({
+            isConnected: true,
+            connectionError: null,
+            isReconnecting: false
+          })
+          get().addNotification('success', '서버에 연결되었습니다.')
+          return
+        }
+        
+        set({ isReconnecting: true, connectionError: null })
         
         // Socket.io 이벤트 리스너 설정
         socketService.on('connect', () => {

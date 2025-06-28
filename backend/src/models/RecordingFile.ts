@@ -72,8 +72,7 @@ const recordingFileSchema = new Schema<RecordingFileDocument>({
   },
   uploadedAt: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
   },
   gridFSId: {
     type: mongoose.Schema.Types.ObjectId
@@ -92,7 +91,7 @@ recordingFileSchema.index({ roomId: 1, uploadedAt: -1 })
 recordingFileSchema.index({ participantId: 1, uploadedAt: -1 })
 
 // TTL 인덱스 (30일 후 자동 삭제)
-recordingFileSchema.index({ uploadedAt: 1 }, { expireAfterSeconds: 2592000 })
+recordingFileSchema.index({ uploadedAt: 1 }, { expireAfterSeconds: 2592000, name: 'ttl_uploadedAt' })
 
 // 스키마 메서드
 recordingFileSchema.methods.addTranscription = function(transcription: TranscriptionResult) {

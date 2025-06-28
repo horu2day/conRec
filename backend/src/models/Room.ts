@@ -41,8 +41,7 @@ const roomSchema = new Schema<RoomDocument>({
   },
   createdAt: {
     type: Date,
-    default: Date.now,
-    index: true
+    default: Date.now
   },
   recordingStartedAt: {
     type: Date
@@ -66,8 +65,8 @@ roomSchema.index({ createdAt: -1 })
 roomSchema.index({ status: 1, createdAt: -1 })
 roomSchema.index({ hostId: 1, createdAt: -1 })
 
-// TTL 인덱스 (24시간 후 자동 삭제)
-roomSchema.index({ createdAt: 1 }, { expireAfterSeconds: 86400 })
+// TTL 인덱스 (24시간 후 자동 삭제) - 다른 필드명 사용
+roomSchema.index({ createdAt: 1 }, { expireAfterSeconds: 86400, name: 'ttl_createdAt' })
 
 // 스키마 메서드
 roomSchema.methods.addParticipant = function(participant: IRoomType['participants'][0]) {

@@ -8,7 +8,7 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
-import { Request } from 'express';
+import { Request, Response, NextFunction, ErrorRequestHandler } from 'express';
 import { logger } from '../utils/logger';
 
 // 업로드 디렉토리 생성
@@ -122,81 +122,90 @@ export const uploadMultipleAudio = multer({
 /**
  * Multer 에러 핸들링 미들웨어
  */
-export const handleUploadError = (error: any, req: Request, res: any, next: any) => {
+export const handleUploadError: ErrorRequestHandler = (error: any, req: Request, res: Response, next: NextFunction): void => {
   if (error instanceof multer.MulterError) {
     logger.error('Multer 업로드 에러:', error);
 
     switch (error.code) {
       case 'LIMIT_FILE_SIZE':
-        return res.status(413).json({
+        res.status(413).json({
           success: false,
           message: '파일 크기가 너무 큽니다. 최대 100MB까지 업로드 가능합니다.',
           code: 'FILE_TOO_LARGE'
         });
+        return;
 
       case 'LIMIT_FILE_COUNT':
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: '파일 개수가 제한을 초과했습니다.',
           code: 'TOO_MANY_FILES'
         });
+        return;
 
       case 'LIMIT_UNEXPECTED_FILE':
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: '예상하지 못한 파일 필드입니다.',
           code: 'UNEXPECTED_FIELD'
         });
+        return;
 
       case 'LIMIT_PART_COUNT':
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: '양식 부분이 너무 많습니다.',
           code: 'TOO_MANY_PARTS'
         });
+        return;
 
       case 'LIMIT_FIELD_KEY':
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: '필드 이름이 너무 깁니다.',
           code: 'FIELD_NAME_TOO_LONG'
         });
+        return;
 
       case 'LIMIT_FIELD_VALUE':
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: '필드 값이 너무 깁니다.',
           code: 'FIELD_VALUE_TOO_LONG'
         });
+        return;
 
       case 'LIMIT_FIELD_COUNT':
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: '필드 개수가 너무 많습니다.',
           code: 'TOO_MANY_FIELDS'
         });
+        return;
 
       default:
-        return res.status(400).json({
+        res.status(400).json({
           success: false,
           message: '파일 업로드 중 오류가 발생했습니다.',
           code: 'UPLOAD_ERROR'
         });
+        return;
     }
   }
 
   // 파일 필터 에러 (지원하지 않는 파일 형식)
   if (error.message.includes('지원하지 않는 파일 형식')) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       message: error.message,
       code: 'INVALID_FILE_TYPE'
     });
+    return;
   }
 
   // 기타 에러
   logger.error('업로드 에러:', error);
-  return res.status(500).json({
+  res.status(500).json({
     success: false,
     message: '파일 업로드 처리 중 서버 오류가 발생했습니다.',
     code: 'INTERNAL_ERROR'

@@ -1,9 +1,16 @@
 import mongoose, { Schema, Document } from 'mongoose'
 import { RecordingFile as IRecordingFileType, TranscriptionResult } from '@/types'
 
-// Mongoose Document 인터페이스
-export interface RecordingFileDocument extends IRecordingFileType, Document {
+// Mongoose Document 인터페이스 (id 속성 제거)
+export interface RecordingFileDocument extends Omit<IRecordingFileType, 'id'>, Document {
   _id: string
+  
+  // 메서드 정의
+  addTranscription(transcription: TranscriptionResult): Promise<this>
+  hasTranscription(): boolean
+  getFileExtension(): string
+  getFormattedSize(): string
+  getFormattedDuration(): string
 }
 
 // 전사 결과 서브스키마
@@ -24,36 +31,33 @@ const transcriptionResultSchema = new Schema({
 
 // 녹음 파일 스키마 정의
 const recordingFileSchema = new Schema<RecordingFileDocument>({
-  id: {
-    type: String,
-    required: true,
-    unique: true,
-    index: true
-  },
   roomId: {
     type: String,
     required: true,
     index: true
   },
-  userId: {
+  participantId: {
     type: String,
     required: true,
     index: true
+  },
+  participantName: {
+    type: String,
+    required: true
   },
   fileName: {
     type: String,
     required: true
   },
   originalName: {
-    type: String,
-    required: true
+    type: String
   },
   mimeType: {
     type: String,
     required: true,
     enum: ['audio/wav', 'audio/webm', 'audio/mp3', 'audio/ogg', 'audio/m4a', 'audio/mpeg']
   },
-  size: {
+  fileSize: {
     type: Number,
     required: true,
     min: 0
@@ -71,6 +75,9 @@ const recordingFileSchema = new Schema<RecordingFileDocument>({
     default: Date.now,
     index: true
   },
+  gridFSId: {
+    type: mongoose.Schema.Types.ObjectId
+  },
   transcription: {
     type: transcriptionResultSchema
   }
@@ -80,9 +87,9 @@ const recordingFileSchema = new Schema<RecordingFileDocument>({
 })
 
 // 복합 인덱스
-recordingFileSchema.index({ roomId: 1, userId: 1 })
+recordingFileSchema.index({ roomId: 1, participantId: 1 })
 recordingFileSchema.index({ roomId: 1, uploadedAt: -1 })
-recordingFileSchema.index({ userId: 1, uploadedAt: -1 })
+recordingFileSchema.index({ participantId: 1, uploadedAt: -1 })
 
 // TTL 인덱스 (30일 후 자동 삭제)
 recordingFileSchema.index({ uploadedAt: 1 }, { expireAfterSeconds: 2592000 })
@@ -111,7 +118,7 @@ recordingFileSchema.methods.getFileExtension = function(): string {
 }
 
 recordingFileSchema.methods.getFormattedSize = function(): string {
-  const bytes = this.size
+  const bytes = this.fileSize
   if (bytes === 0) return '0 Bytes'
   
   const k = 1024
@@ -141,12 +148,12 @@ recordingFileSchema.statics.findByRoomId = function(roomId: string) {
   return this.find({ roomId }).sort({ uploadedAt: 1 })
 }
 
-recordingFileSchema.statics.findByUserId = function(userId: string) {
-  return this.find({ userId }).sort({ uploadedAt: -1 })
+recordingFileSchema.statics.findByParticipantId = function(participantId: string) {
+  return this.find({ participantId }).sort({ uploadedAt: -1 })
 }
 
-recordingFileSchema.statics.findByRoomAndUser = function(roomId: string, userId: string) {
-  return this.findOne({ roomId, userId })
+recordingFileSchema.statics.findByRoomAndParticipant = function(roomId: string, participantId: string) {
+  return this.findOne({ roomId, participantId })
 }
 
 recordingFileSchema.statics.findPendingTranscription = function() {
@@ -165,7 +172,7 @@ recordingFileSchema.statics.getTotalSize = function(roomId?: string) {
   const match = roomId ? { roomId } : {}
   return this.aggregate([
     { $match: match },
-    { $group: { _id: null, totalSize: { $sum: '$size' } } }
+    { $group: { _id: null, totalSize: { $sum: '$fileSize' } } }
   ])
 }
 
@@ -176,7 +183,7 @@ recordingFileSchema.statics.getStatsByRoom = function(roomId: string) {
       $group: {
         _id: null,
         totalFiles: { $sum: 1 },
-        totalSize: { $sum: '$size' },
+        totalSize: { $sum: '$fileSize' },
         totalDuration: { $sum: '$duration' },
         transcribedFiles: {
           $sum: { $cond: [{ $exists: ['$transcription', true] }, 1, 0] }
@@ -186,27 +193,10 @@ recordingFileSchema.statics.getStatsByRoom = function(roomId: string) {
   ])
 }
 
-// 가상 필드
-recordingFileSchema.virtual('isTranscribed').get(function() {
-  return !!this.transcription
-})
-
-recordingFileSchema.virtual('fileExtension').get(function() {
-  return this.getFileExtension()
-})
-
-recordingFileSchema.virtual('formattedSize').get(function() {
-  return this.getFormattedSize()
-})
-
-recordingFileSchema.virtual('formattedDuration').get(function() {
-  return this.getFormattedDuration()
-})
-
-// JSON 변환 시 _id 제거 및 가상 필드 포함
+// JSON 변환 시 _id 제거
 recordingFileSchema.set('toJSON', {
-  virtuals: true,
   transform: function(doc, ret) {
+    ret.id = ret._id // _id를 id로 변환
     delete ret._id
     delete ret.__v
     return ret
@@ -215,6 +205,3 @@ recordingFileSchema.set('toJSON', {
 
 // 모델 생성 및 export
 export const RecordingFile = mongoose.model<RecordingFileDocument>('RecordingFile', recordingFileSchema)
-
-// 타입 export
-export type { RecordingFileDocument }

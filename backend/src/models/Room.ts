@@ -1,9 +1,10 @@
 import mongoose, { Schema, Document } from 'mongoose'
 import { Room as IRoomType, RoomStatus } from '@/types'
 
-// Mongoose Document 인터페이스
-export interface RoomDocument extends IRoomType, Document {
+// Mongoose Document 인터페이스 (id 속성 제거)
+export interface RoomDocument extends Omit<IRoomType, 'id'>, Document {
   _id: string
+  id: string
 }
 
 // 회의방 스키마 정의
@@ -138,25 +139,6 @@ roomSchema.statics.findRecordingRooms = function() {
   return this.find({ status: 'recording' })
 }
 
-// 가상 필드
-roomSchema.virtual('participantCount').get(function() {
-  return this.participants.length
-})
-
-roomSchema.virtual('isActive').get(function() {
-  return ['waiting', 'recording'].includes(this.status)
-})
-
-roomSchema.virtual('duration').get(function() {
-  if (this.recordingStartedAt && this.recordingEndedAt) {
-    return this.recordingEndedAt.getTime() - this.recordingStartedAt.getTime()
-  }
-  if (this.recordingStartedAt) {
-    return Date.now() - this.recordingStartedAt.getTime()
-  }
-  return 0
-})
-
 // JSON 변환 시 _id 제거
 roomSchema.set('toJSON', {
   transform: function(doc, ret) {
@@ -168,6 +150,3 @@ roomSchema.set('toJSON', {
 
 // 모델 생성 및 export
 export const Room = mongoose.model<RoomDocument>('Room', roomSchema)
-
-// 타입 export
-export type { RoomDocument }

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import { Mic, MicOff, Users, Clock, Settings, LogOut, Copy, Check, Zap, Shield, AlertCircle } from 'lucide-react'
+import useMeetingStore from '../stores/meetingStore'
+import toast from 'react-hot-toast'
 
 interface LocationState {
   isHost: boolean
@@ -14,27 +16,126 @@ const MeetingRoomPage = () => {
   const navigate = useNavigate()
   
   const state = location.state as LocationState
-  const [isHost] = useState(state?.isHost || false)
-  const [userName] = useState(state?.userName || 'Unknown User')
+  const [linkCopied, setLinkCopied] = useState(false)
   
-  const [isRecording, setIsRecording] = useState(false)
+  // MeetingStore 상태 연결
+  const {
+    // 상태
+    isConnected,
+    currentRoom,
+    isHost: storeIsHost,
+    participantName,
+    isRecording,
+    recordingDuration,
+    recordingStartTime,
+    isLoading,
+    error,
+    notifications,
+    
+    // 액션
+    connect,
+    joinRoom,
+    createRoom,
+    startRecording,
+    stopRecording,
+    leaveRoom,
+    setError,
+    clearError,
+    removeNotification
+  } = useMeetingStore()
+
   const [isMicrophoneEnabled, setIsMicrophoneEnabled] = useState(true)
   const [meetingDuration, setMeetingDuration] = useState(0)
-  const [linkCopied, setLinkCopied] = useState(false)
-  const [participants] = useState([
-    { id: '1', name: userName, isHost, microphoneEnabled: true, recordingStatus: 'idle', audioLevel: 45 },
-    { id: '2', name: 'Alice Kim', isHost: false, microphoneEnabled: true, recordingStatus: 'idle', audioLevel: 23 },
-    { id: '3', name: 'Bob Lee', isHost: false, microphoneEnabled: false, recordingStatus: 'idle', audioLevel: 0 },
-  ])
 
-  // 회의 시간 카운터
+  // 초기화 및 연결
   useEffect(() => {
-    const timer = setInterval(() => {
-      setMeetingDuration(prev => prev + 1)
-    }, 1000)
+    if (!isConnected) {
+      connect()
+    }
+  }, [isConnected, connect])
 
-    return () => clearInterval(timer)
-  }, [])
+  // 회의방 입장 로직
+  useEffect(() => {
+    const initializeRoom = async () => {
+      if (!roomId || !state || !isConnected) return
+
+      try {
+        if (state.isHost) {
+          // 호스트인 경우 방이 이미 생성되어 있어야 함
+          if (!currentRoom || currentRoom.id !== roomId) {
+            // 방이 없으면 홈으로 리다이렉트
+            toast.error('회의방 정보를 찾을 수 없습니다.')
+            navigate('/')
+            return
+          }
+        } else {
+          // 참여자인 경우 방에 입장
+          const result = await joinRoom(roomId, state.userName)
+          if (!result.success) {
+            toast.error(result.error || '회의방 참여에 실패했습니다.')
+            navigate('/')
+            return
+          }
+        }
+      } catch (error) {
+        console.error('회의방 초기화 오류:', error)
+        toast.error('회의방 연결에 실패했습니다.')
+        navigate('/')
+      }
+    }
+
+    initializeRoom()
+  }, [roomId, state, isConnected, currentRoom, joinRoom, navigate])
+
+  // 회의 시간 추적
+  useEffect(() => {
+    let timer: NodeJS.Timeout
+    
+    if (isRecording && recordingStartTime) {
+      timer = setInterval(() => {
+        const elapsed = Date.now() - new Date(recordingStartTime).getTime()
+        setMeetingDuration(Math.floor(elapsed / 1000))
+      }, 1000)
+    } else if (!isRecording) {
+      // 녹음이 중지되면 총 시간으로 설정
+      if (recordingDuration > 0) {
+        setMeetingDuration(Math.floor(recordingDuration / 1000))
+      }
+    }
+
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [isRecording, recordingStartTime, recordingDuration])
+
+  // 알림 표시
+  useEffect(() => {
+    notifications.forEach(notification => {
+      switch (notification.type) {
+        case 'success':
+          toast.success(notification.message)
+          break
+        case 'error':
+          toast.error(notification.message)
+          break
+        case 'warning':
+          toast.error(notification.message)
+          break
+        case 'info':
+          toast(notification.message)
+          break
+      }
+      removeNotification(notification.id)
+    })
+  }, [notifications, removeNotification])
+
+  // 오류 표시
+  useEffect(() => {
+    if (error) {
+      toast.error(error)
+      clearError()
+    }
+  }, [error, clearError])
 
   // 시간 포맷팅 함수
   const formatDuration = (seconds: number) => {
@@ -48,35 +149,72 @@ const MeetingRoomPage = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
-  const handleRecordingToggle = () => {
-    if (isHost) {
-      setIsRecording(!isRecording)
-      // TODO: Socket.io로 모든 참여자에게 녹음 상태 변경 신호 전송
+  const handleRecordingToggle = async () => {
+    if (!storeIsHost) {
+      toast.error('호스트만 녹음을 제어할 수 있습니다.')
+      return
+    }
+
+    try {
+      if (isRecording) {
+        const result = await stopRecording()
+        if (!result.success) {
+          toast.error(result.error || '녹음 중지에 실패했습니다.')
+        }
+      } else {
+        const result = await startRecording()
+        if (!result.success) {
+          toast.error(result.error || '녹음 시작에 실패했습니다.')
+        }
+      }
+    } catch (error) {
+      console.error('녹음 제어 오류:', error)
+      toast.error('녹음 제어에 실패했습니다.')
     }
   }
 
   const handleMicrophoneToggle = () => {
     setIsMicrophoneEnabled(!isMicrophoneEnabled)
-    // TODO: 마이크 상태 변경 및 다른 참여자들에게 알림
+    // TODO: 실제 마이크 제어 및 다른 참여자들에게 알림
+    toast.success(isMicrophoneEnabled ? '마이크가 꺼졌습니다.' : '마이크가 켜졌습니다.')
   }
 
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(`${window.location.origin}/join/${roomId}`)
       setLinkCopied(true)
+      toast.success('초대 링크가 복사되었습니다!')
       setTimeout(() => setLinkCopied(false), 2000)
     } catch (error) {
       console.error('링크 복사 실패:', error)
+      toast.error('링크 복사에 실패했습니다.')
     }
   }
 
   const handleLeaveMeeting = () => {
     if (window.confirm('회의를 나가시겠습니까?')) {
-      // TODO: Socket.io 연결 해제 및 리소스 정리
+      leaveRoom()
       navigate('/')
+      toast.success('회의에서 나갔습니다.')
     }
   }
 
+  // 로딩 중이거나 연결되지 않은 경우
+  if (!isConnected || isLoading || !currentRoom) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-center">
+        <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-12 text-center shadow-2xl">
+          <div className="animate-spin w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full mx-auto mb-6"></div>
+          <h2 className="text-3xl font-bold mb-4">
+            {!isConnected ? '서버에 연결 중...' : '회의방 준비 중...'}
+          </h2>
+          <p className="text-gray-300">잠시만 기다려주세요</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 잘못된 접근인 경우
   if (!roomId || !state) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-center">
@@ -94,6 +232,8 @@ const MeetingRoomPage = () => {
       </div>
     )
   }
+
+  const participants = currentRoom.participants || []
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white overflow-hidden">
@@ -118,10 +258,10 @@ const MeetingRoomPage = () => {
                   <div>
                     <h1 className="text-2xl font-black">회의방 {roomId}</h1>
                     <p className="text-gray-400 flex items-center space-x-2">
-                      <span>{isHost ? '진행자' : '참여자'}</span>
+                      <span>{storeIsHost ? '진행자' : '참여자'}</span>
                       <span>•</span>
-                      <span>{userName}</span>
-                      {isHost && (
+                      <span>{participantName || state.userName}</span>
+                      {storeIsHost && (
                         <>
                           <span>•</span>
                           <span className="text-purple-400 font-semibold">HOST</span>
@@ -197,11 +337,12 @@ const MeetingRoomPage = () => {
                   </div>
 
                   {/* 메인 녹음 버튼 - 호스트만 */}
-                  {isHost && (
+                  {storeIsHost && (
                     <div className="mb-12">
                       <button
                         onClick={handleRecordingToggle}
-                        className={`group relative w-48 h-48 rounded-full flex items-center justify-center mx-auto transition-all duration-500 transform hover:scale-105 ${
+                        disabled={isLoading}
+                        className={`group relative w-48 h-48 rounded-full flex items-center justify-center mx-auto transition-all duration-500 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
                           isRecording 
                             ? 'bg-gradient-to-br from-red-500 to-orange-500 shadow-red-500/50 shadow-2xl' 
                             : 'bg-gradient-to-br from-gray-600 to-gray-700 hover:from-purple-500 hover:to-blue-500 shadow-xl'
@@ -213,7 +354,11 @@ const MeetingRoomPage = () => {
                         )}
                         
                         <div className="relative z-10">
-                          <Mic className="w-20 h-20 text-white" />
+                          {isLoading ? (
+                            <div className="animate-spin w-20 h-20 border-4 border-white border-t-transparent rounded-full"></div>
+                          ) : (
+                            <Mic className="w-20 h-20 text-white" />
+                          )}
                         </div>
                         
                         {/* 호버 효과 */}
@@ -251,7 +396,7 @@ const MeetingRoomPage = () => {
                   </div>
 
                   {/* 호스트 안내 메시지 */}
-                  {isHost && (
+                  {storeIsHost && (
                     <div className="mt-12 backdrop-blur-xl bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-2xl p-6">
                       <div className="flex items-start space-x-3">
                         <Shield className="w-6 h-6 text-purple-400 mt-1 flex-shrink-0" />
@@ -314,34 +459,27 @@ const MeetingRoomPage = () => {
                             </div>
                             <div className="flex items-center space-x-2 mt-1">
                               <p className="text-sm text-gray-400">
-                                {isRecording && participant.microphoneEnabled ? '녹음 중' : '대기 중'}
+                                {participant.recordingStatus === 'recording' ? '녹음 중' : 
+                                 participant.recordingStatus === 'stopped' ? '녹음 완료' : '대기 중'}
                               </p>
                               
-                              {/* 음성 레벨 표시 */}
-                              {participant.microphoneEnabled && (
-                                <div className="flex items-center space-x-1">
-                                  {[...Array(5)].map((_, i) => (
-                                    <div 
-                                      key={i}
-                                      className={`w-1 h-3 rounded-full transition-all duration-200 ${
-                                        i < Math.floor(participant.audioLevel / 20) 
-                                          ? 'bg-emerald-400' 
-                                          : 'bg-gray-600'
-                                      }`}
-                                    />
-                                  ))}
-                                </div>
-                              )}
+                              {/* 음성 레벨 표시 (임시) */}
+                              <div className="flex items-center space-x-1">
+                                {[...Array(5)].map((_, i) => (
+                                  <div 
+                                    key={i}
+                                    className={`w-1 h-3 rounded-full transition-all duration-200 ${
+                                      i < 2 ? 'bg-emerald-400' : 'bg-gray-600'
+                                    }`}
+                                  />
+                                ))}
+                              </div>
                             </div>
                           </div>
                         </div>
                         
                         <div className="flex items-center space-x-2">
-                          {participant.microphoneEnabled ? (
-                            <Mic className="w-5 h-5 text-emerald-400" />
-                          ) : (
-                            <MicOff className="w-5 h-5 text-red-400" />
-                          )}
+                          <Mic className="w-5 h-5 text-emerald-400" />
                         </div>
                       </div>
                     </div>

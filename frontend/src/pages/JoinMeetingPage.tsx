@@ -1,17 +1,67 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Users, AlertCircle, CheckCircle, Sparkles, LogIn, Shield } from 'lucide-react'
+import useMeetingStore from '../stores/meetingStore'
+import toast from 'react-hot-toast'
 
 const JoinMeetingPage = () => {
   const navigate = useNavigate()
   const { roomId: urlRoomId } = useParams()
   
-  const [isLoading, setIsLoading] = useState(false)
   const [roomStatus, setRoomStatus] = useState<'checking' | 'valid' | 'invalid' | 'ended'>('checking')
   const [formData, setFormData] = useState({
     roomId: urlRoomId || '',
     userName: '',
   })
+
+  // MeetingStore 연결
+  const {
+    isConnected,
+    isLoading,
+    error,
+    notifications,
+    connect,
+    joinRoom,
+    setError,
+    clearError,
+    removeNotification
+  } = useMeetingStore()
+
+  // 초기 연결
+  useEffect(() => {
+    if (!isConnected) {
+      connect()
+    }
+  }, [isConnected, connect])
+
+  // 알림 표시
+  useEffect(() => {
+    notifications.forEach(notification => {
+      switch (notification.type) {
+        case 'success':
+          toast.success(notification.message)
+          break
+        case 'error':
+          toast.error(notification.message)
+          break
+        case 'warning':
+          toast.error(notification.message)
+          break
+        case 'info':
+          toast(notification.message)
+          break
+      }
+      removeNotification(notification.id)
+    })
+  }, [notifications, removeNotification])
+
+  // 오류 표시
+  useEffect(() => {
+    if (error) {
+      toast.error(error)
+      clearError()
+    }
+  }, [error, clearError])
 
   // URL에 roomId가 있으면 자동으로 방 상태 확인
   useEffect(() => {
@@ -31,15 +81,10 @@ const JoinMeetingPage = () => {
     setRoomStatus('checking')
     
     try {
-      // TODO: API 호출로 방 상태 확인
-      // const response = await checkRoom(roomId)
-      
-      // 임시 로직 - 실제로는 서버에서 확인
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // 랜덤하게 성공/실패 시뮬레이션 (개발용)
-      const isValid = Math.random() > 0.3
-      setRoomStatus(isValid ? 'valid' : 'invalid')
+      // 실제 구현에서는 서버에 room 상태 확인 API가 필요
+      // 현재는 기본적으로 valid로 처리 (실제 검증은 joinRoom에서)
+      await new Promise(resolve => setTimeout(resolve, 500))
+      setRoomStatus('valid')
       
     } catch (error) {
       console.error('방 상태 확인 실패:', error)
@@ -51,38 +96,48 @@ const JoinMeetingPage = () => {
     e.preventDefault()
     
     if (!formData.roomId.trim()) {
-      alert('회의 ID를 입력해주세요.')
+      toast.error('회의 ID를 입력해주세요.')
       return
     }
     
     if (!formData.userName.trim()) {
-      alert('이름을 입력해주세요.')
+      toast.error('이름을 입력해주세요.')
       return
     }
 
-    if (roomStatus !== 'valid') {
-      alert('유효하지 않은 회의방입니다.')
+    if (!isConnected) {
+      toast.error('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.')
       return
     }
-
-    setIsLoading(true)
     
     try {
-      // TODO: API 호출로 회의 참여
-      // const response = await joinRoom(formData)
+      const result = await joinRoom(formData.roomId, formData.userName)
       
-      // 회의방으로 이동
-      navigate(`/meeting/${formData.roomId}`, {
-        state: { 
-          isHost: false, 
-          userName: formData.userName 
+      if (result.success) {
+        toast.success('회의에 성공적으로 참여했습니다!')
+        
+        // 회의방으로 이동
+        navigate(`/meeting/${formData.roomId}`, {
+          state: { 
+            isHost: false, 
+            userName: formData.userName 
+          }
+        })
+      } else {
+        // 구체적인 오류 메시지 표시
+        if (result.error?.includes('존재하지 않는')) {
+          setRoomStatus('invalid')
+        } else if (result.error?.includes('종료된')) {
+          setRoomStatus('ended')
+        } else if (result.error?.includes('가득')) {
+          toast.error('회의방이 가득 찼습니다. 나중에 다시 시도해주세요.')
+        } else {
+          toast.error(result.error || '회의 참여에 실패했습니다.')
         }
-      })
+      }
     } catch (error) {
       console.error('회의 참여 실패:', error)
-      alert('회의 참여에 실패했습니다. 다시 시도해주세요.')
-    } finally {
-      setIsLoading(false)
+      toast.error('회의 참여에 실패했습니다. 다시 시도해주세요.')
     }
   }
 
@@ -117,7 +172,7 @@ const JoinMeetingPage = () => {
         return formData.roomId.trim().length > 5 ? (
           <div className="flex items-center space-x-2 text-emerald-400 mt-3">
             <CheckCircle className="w-4 h-4" />
-            <span className="text-sm font-medium">유효한 회의방입니다</span>
+            <span className="text-sm font-medium">회의 ID 형식이 올바릅니다</span>
           </div>
         ) : null
       case 'invalid':
@@ -152,22 +207,32 @@ const JoinMeetingPage = () => {
       <header className="relative z-10 p-6">
         <div className="max-w-4xl mx-auto">
           <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl px-6 py-4 shadow-2xl">
-            <div className="flex items-center space-x-4">
-              <Link 
-                to="/" 
-                className="group p-3 hover:bg-white/10 rounded-xl transition-all duration-300 hover:scale-105"
-              >
-                <ArrowLeft className="w-5 h-5 group-hover:text-emerald-300 transition-colors" />
-              </Link>
-              
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-blue-500 rounded-xl flex items-center justify-center">
-                  <LogIn className="w-6 h-6 text-white" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <Link 
+                  to="/" 
+                  className="group p-3 hover:bg-white/10 rounded-xl transition-all duration-300 hover:scale-105"
+                >
+                  <ArrowLeft className="w-5 h-5 group-hover:text-emerald-300 transition-colors" />
+                </Link>
+                
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-blue-500 rounded-xl flex items-center justify-center">
+                    <LogIn className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-black">회의 참여</h1>
+                    <p className="text-sm text-gray-400">기존 회의실에 입장하세요</p>
+                  </div>
                 </div>
-                <div>
-                  <h1 className="text-2xl font-black">회의 참여</h1>
-                  <p className="text-sm text-gray-400">기존 회의실에 입장하세요</p>
-                </div>
+              </div>
+
+              {/* 연결 상태 표시 */}
+              <div className="flex items-center space-x-2">
+                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`}></div>
+                <span className="text-sm text-gray-400">
+                  {isConnected ? '연결됨' : '연결 중...'}
+                </span>
               </div>
             </div>
           </div>
@@ -225,7 +290,7 @@ const JoinMeetingPage = () => {
                       placeholder="회의 ID를 입력하세요"
                       className="w-full px-6 py-4 bg-white/5 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:border-emerald-400 focus:bg-white/10 transition-all duration-300 text-lg"
                       required
-                      disabled={!!urlRoomId} // URL에서 온 경우 수정 불가
+                      disabled={!!urlRoomId || isLoading} // URL에서 온 경우 수정 불가
                     />
                     {urlRoomId && (
                       <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
@@ -257,9 +322,12 @@ const JoinMeetingPage = () => {
                       className="w-full px-6 py-4 bg-white/5 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all duration-300 text-lg"
                       required
                       maxLength={50}
+                      disabled={isLoading}
                     />
                     <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                      <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                      <div className={`w-2 h-2 rounded-full animate-pulse ${
+                        formData.userName.trim() ? 'bg-blue-400' : 'bg-gray-500'
+                      }`}></div>
                     </div>
                   </div>
                   <p className="text-sm text-gray-400">
@@ -284,7 +352,7 @@ const JoinMeetingPage = () => {
                 {/* 제출 버튼 */}
                 <button
                   type="submit"
-                  disabled={isLoading || !formData.roomId.trim() || !formData.userName.trim() || roomStatus !== 'valid'}
+                  disabled={isLoading || !formData.roomId.trim() || !formData.userName.trim() || !isConnected || roomStatus === 'invalid' || roomStatus === 'ended'}
                   className="group relative w-full bg-gradient-to-r from-emerald-500 to-blue-500 hover:from-emerald-600 hover:to-blue-600 disabled:from-gray-600 disabled:to-gray-700 rounded-2xl py-5 text-xl font-bold transition-all duration-300 hover:scale-105 disabled:scale-100 disabled:cursor-not-allowed shadow-2xl"
                 >
                   <div className="flex items-center justify-center space-x-3">
@@ -292,6 +360,21 @@ const JoinMeetingPage = () => {
                       <>
                         <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         <span>참여 중...</span>
+                      </>
+                    ) : !isConnected ? (
+                      <>
+                        <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>서버 연결 중...</span>
+                      </>
+                    ) : roomStatus === 'invalid' ? (
+                      <>
+                        <AlertCircle className="w-6 h-6" />
+                        <span>유효하지 않은 회의방</span>
+                      </>
+                    ) : roomStatus === 'ended' ? (
+                      <>
+                        <AlertCircle className="w-6 h-6" />
+                        <span>종료된 회의방</span>
                       </>
                     ) : (
                       <>

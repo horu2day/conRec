@@ -8,7 +8,7 @@ export const errorHandler = (
   error: AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void => {
   // 에러 로깅
   logger.error(`Error in ${req.method} ${req.path}`, {
@@ -85,7 +85,7 @@ export const errorHandler = (
 // 404 에러 핸들러
 export const notFoundHandler = (
   req: Request,
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): void => {
   const error = new Error(`Not found - ${req.originalUrl}`) as AppError

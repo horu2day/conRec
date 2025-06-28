@@ -10,11 +10,19 @@ const startServer = async (): Promise<void> => {
     await ensureDirectoryExists(config.UPLOAD_DIR)
     logger.info(`Upload directory created/verified: ${config.UPLOAD_DIR}`)
 
-    // 데이터베이스 연결
-    const { connectToDatabase, ensureIndexes } = await import('@/config/database')
-    await connectToDatabase()
-    await ensureIndexes()
-    logger.info('✅ Database connected and indexes created')
+    // 데이터베이스 연결 시도 (개발 환경에서는 실패해도 계속 진행)
+    try {
+      const { connectToDatabase, ensureIndexes } = await import('@/config/database')
+      await connectToDatabase()
+      await ensureIndexes()
+      logger.info('✅ Database connected and indexes created')
+    } catch (error) {
+      if (config.isDevelopment) {
+        logger.warn('⚠️ Database connection failed, using in-memory storage for development:', error)
+      } else {
+        throw error
+      }
+    }
     
     // 서버 시작
     httpServer.listen(config.PORT, () => {

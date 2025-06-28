@@ -11,7 +11,7 @@
 
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
-import { MeetingRoom } from '../models/Room';
+import { Room } from '../models/Room';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
 
@@ -94,14 +94,18 @@ class SocketService {
           socket.join(roomId);
 
           // MongoDB에 회의방 정보 저장
-          const meetingRoom = new MeetingRoom({
-            roomId,
-            hostId,
-            participants: [hostParticipant],
-            status: 'waiting',
-            createdAt: new Date()
-          });
-          await meetingRoom.save();
+          try {
+            const meetingRoom = new Room({
+              id: roomId,
+              hostId,
+              participants: [hostParticipant],
+              status: 'waiting',
+              createdAt: new Date()
+            });
+            await meetingRoom.save();
+          } catch (dbError) {
+            logger.warn('MongoDB 저장 실패 (계속 진행):', dbError);
+          }
 
           logger.info(`회의방 생성: ${roomId}, 호스트: ${data.hostName}`);
 
@@ -431,4 +435,5 @@ class SocketService {
   }
 }
 
-export { SocketService, ParticipantData, RoomData };
+export { SocketService }
+export type { ParticipantData, RoomData }

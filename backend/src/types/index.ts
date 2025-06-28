@@ -31,14 +31,16 @@ export type RecordingStatus = 'idle' | 'recording' | 'uploading' | 'completed' |
 export interface RecordingFile {
   id: string
   roomId: string
-  userId: string
+  participantId: string
+  participantName: string
   fileName: string
-  originalName: string
+  originalName?: string
   mimeType: string
-  size: number
+  fileSize: number
   duration?: number
   filePath: string
   uploadedAt: Date
+  gridFSId?: any
   transcription?: TranscriptionResult
 }
 

@@ -1,46 +1,99 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Users, Clock, Mic, Sparkles, Copy, Check, Zap } from 'lucide-react'
+import { ArrowLeft, Users, Clock, Mic, Sparkles, Zap } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import useMeetingStore from '../stores/meetingStore'
+import toast from 'react-hot-toast'
 
 const CreateMeetingPage = () => {
   const navigate = useNavigate()
-  const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
     hostName: '',
     maxParticipants: 10,
   })
 
+  // MeetingStore 연결
+  const {
+    isConnected,
+    isLoading,
+    error,
+    notifications,
+    connect,
+    createRoom,
+    setError,
+    clearError,
+    removeNotification
+  } = useMeetingStore()
+
+  // 초기 연결
+  useEffect(() => {
+    if (!isConnected) {
+      connect()
+    }
+  }, [isConnected, connect])
+
+  // 알림 표시
+  useEffect(() => {
+    notifications.forEach(notification => {
+      switch (notification.type) {
+        case 'success':
+          toast.success(notification.message)
+          break
+        case 'error':
+          toast.error(notification.message)
+          break
+        case 'warning':
+          toast.error(notification.message)
+          break
+        case 'info':
+          toast(notification.message)
+          break
+      }
+      removeNotification(notification.id)
+    })
+  }, [notifications, removeNotification])
+
+  // 오류 표시
+  useEffect(() => {
+    if (error) {
+      toast.error(error)
+      clearError()
+    }
+  }, [error, clearError])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!formData.hostName.trim()) {
-      alert('이름을 입력해주세요.')
+      toast.error('이름을 입력해주세요.')
       return
     }
 
-    setIsLoading(true)
+    if (!isConnected) {
+      toast.error('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.')
+      return
+    }
     
     try {
-      // TODO: API 호출로 회의방 생성
-      // const response = await createRoom(formData)
+      const result = await createRoom(formData.hostName)
       
-      // 임시로 랜덤 ID 생성
-      const roomId = Math.random().toString(36).substring(2, 15)
-      
-      // 회의방으로 이동
-      navigate(`/meeting/${roomId}`, {
-        state: { 
-          isHost: true, 
-          userName: formData.hostName,
-          maxParticipants: formData.maxParticipants
-        }
-      })
+      if (result.success && result.roomId) {
+        toast.success('회의방이 생성되었습니다!')
+        
+        // 회의방으로 이동
+        navigate(`/meeting/${result.roomId}`, {
+          state: { 
+            isHost: true, 
+            userName: formData.hostName,
+            maxParticipants: formData.maxParticipants
+          }
+        })
+      } else {
+        toast.error(result.error || '회의방 생성에 실패했습니다.')
+      }
     } catch (error) {
       console.error('회의방 생성 실패:', error)
-      alert('회의방 생성에 실패했습니다. 다시 시도해주세요.')
-    } finally {
-      setIsLoading(false)
+      toast.error('회의방 생성에 실패했습니다. 다시 시도해주세요.')
     }
   }
 
@@ -65,22 +118,32 @@ const CreateMeetingPage = () => {
       <header className="relative z-10 p-6">
         <div className="max-w-4xl mx-auto">
           <div className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl px-6 py-4 shadow-2xl">
-            <div className="flex items-center space-x-4">
-              <Link 
-                to="/" 
-                className="group p-3 hover:bg-white/10 rounded-xl transition-all duration-300 hover:scale-105"
-              >
-                <ArrowLeft className="w-5 h-5 group-hover:text-purple-300 transition-colors" />
-              </Link>
-              
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
-                  <Users className="w-6 h-6 text-white" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <Link 
+                  to="/" 
+                  className="group p-3 hover:bg-white/10 rounded-xl transition-all duration-300 hover:scale-105"
+                >
+                  <ArrowLeft className="w-5 h-5 group-hover:text-purple-300 transition-colors" />
+                </Link>
+                
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
+                    <Users className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-black">회의방 생성</h1>
+                    <p className="text-sm text-gray-400">새로운 회의실을 만들어보세요</p>
+                  </div>
                 </div>
-                <div>
-                  <h1 className="text-2xl font-black">회의방 생성</h1>
-                  <p className="text-sm text-gray-400">새로운 회의실을 만들어보세요</p>
-                </div>
+              </div>
+
+              {/* 연결 상태 표시 */}
+              <div className="flex items-center space-x-2">
+                <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`}></div>
+                <span className="text-sm text-gray-400">
+                  {isConnected ? '연결됨' : '연결 중...'}
+                </span>
               </div>
             </div>
           </div>
@@ -150,9 +213,12 @@ const CreateMeetingPage = () => {
                         className="w-full px-6 py-4 bg-white/5 border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:border-purple-400 focus:bg-white/10 transition-all duration-300 text-lg"
                         required
                         maxLength={50}
+                        disabled={isLoading}
                       />
                       <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
-                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                        <div className={`w-2 h-2 rounded-full animate-pulse ${
+                          formData.hostName.trim() ? 'bg-emerald-400' : 'bg-gray-500'
+                        }`}></div>
                       </div>
                     </div>
                     <p className="text-sm text-gray-400">
@@ -174,19 +240,20 @@ const CreateMeetingPage = () => {
                         value={formData.maxParticipants}
                         onChange={handleInputChange}
                         min="2"
-                        max="50"
+                        max="10"
                         className="w-full pl-12 pr-6 py-4 bg-white/5 border border-white/20 rounded-2xl text-white focus:outline-none focus:border-blue-400 focus:bg-white/10 transition-all duration-300 text-lg"
+                        disabled={isLoading}
                       />
                     </div>
                     <p className="text-sm text-gray-400">
-                      회의에 참여할 수 있는 최대 인원 (2-50명)
+                      회의에 참여할 수 있는 최대 인원 (2-10명)
                     </p>
                   </div>
 
                   {/* 제출 버튼 */}
                   <button
                     type="submit"
-                    disabled={isLoading || !formData.hostName.trim()}
+                    disabled={isLoading || !formData.hostName.trim() || !isConnected}
                     className="group relative w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 disabled:from-gray-600 disabled:to-gray-700 rounded-2xl py-5 text-xl font-bold transition-all duration-300 hover:scale-105 disabled:scale-100 disabled:cursor-not-allowed shadow-2xl"
                   >
                     <div className="flex items-center justify-center space-x-3">
@@ -194,6 +261,11 @@ const CreateMeetingPage = () => {
                         <>
                           <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                           <span>회의방 생성 중...</span>
+                        </>
+                      ) : !isConnected ? (
+                        <>
+                          <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          <span>서버 연결 중...</span>
                         </>
                       ) : (
                         <>

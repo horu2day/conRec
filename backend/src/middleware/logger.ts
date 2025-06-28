@@ -24,20 +24,6 @@ export const addRequestInfo = (req: Request, res: Response, next: NextFunction):
   next()
 }
 
-// 커스텀 로그 포맷 생성
-const createCustomFormat = (): string => {
-  return [
-    ':remote-addr',
-    ':method',
-    ':url',
-    ':status',
-    ':res[content-length]',
-    '-',
-    ':response-time ms',
-    ':user-agent'
-  ].join(' ')
-}
-
 // 개발 환경용 상세 로그 포맷
 const createDevFormat = (): string => {
   return [
@@ -134,7 +120,7 @@ export const detailedLogger = (req: Request, res: Response, next: NextFunction):
 }
 
 // 에러 로그 미들웨어
-export const errorLogger = (error: Error, req: Request, res: Response, next: NextFunction): void => {
+export const errorLogger = (error: Error, req: Request, _res: Response, next: NextFunction): void => {
   logger.error(`Error [${req.requestId}]: ${error.message}`, {
     error: {
       name: error.name,

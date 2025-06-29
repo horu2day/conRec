@@ -4,9 +4,10 @@
   "description": "회의실 음성 녹음 시스템 - 백엔드 서버",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "nodemon --exec ts-node src/server.ts",
+    "dev": "nodemon --exec \"npx ts-node -r tsconfig-paths/register src/server.ts\"",
+    "dev-simple": "npx ts-node -r tsconfig-paths/register src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node -r tsconfig-paths/register dist/server.js",
     "type-check": "tsc --noEmit",
     "clean": "rimraf dist",
     "prebuild": "npm run clean",
@@ -58,5 +59,8 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
+  },
+  "_moduleAliases": {
+    "@": "./dist"
   }
 }

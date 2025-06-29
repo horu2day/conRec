@@ -1,7 +1,7 @@
 import { httpServer } from './app'
-import { config } from '@/config'
-import { logger } from '@/utils/logger'
-import { ensureDirectoryExists } from '@/utils/helpers'
+import { config } from './config/index'
+import { logger } from './utils/logger'
+import { ensureDirectoryExists } from './utils/helpers'
 
 // 서버 시작 함수
 const startServer = async (): Promise<void> => {
@@ -12,7 +12,7 @@ const startServer = async (): Promise<void> => {
 
     // 데이터베이스 연결 시도 (개발 환경에서는 실패해도 계속 진행)
     try {
-      const { connectToDatabase, ensureIndexes } = await import('@/config/database')
+      const { connectToDatabase, ensureIndexes } = await import('./config/database')
       await connectToDatabase()
       await ensureIndexes()
       logger.info('✅ Database connected and indexes created')

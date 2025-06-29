@@ -57,30 +57,57 @@ const MeetingRoomPage = () => {
   // 회의방 입장 로직
   useEffect(() => {
     const initializeRoom = async () => {
-      if (!roomId || !state || !isConnected) return
+      console.log('🔍 회의방 초기화:', { roomId, state, isConnected, currentRoom })
+      
+      if (!roomId || !state) {
+        console.error('❌ roomId 또는 state가 없습니다.')
+        return
+      }
+
+      // Socket 연결 대기
+      if (!isConnected) {
+        console.log('🔄 Socket 연결 대기 중...')
+        return // 연결되면 다시 실행됨
+      }
 
       try {
         if (state.isHost) {
-          // 호스트인 경우 방이 이미 생성되어 있어야 함
+          console.log('🎯 호스트 모드 - 회의방 상태 확인')
+          // 호스트인 경우: 회의방이 없어도 계속 진행 (이미 생성되었을 수 있음)
           if (!currentRoom || currentRoom.id !== roomId) {
-            // 방이 없으면 홈으로 리다이렉트
-            toast.error('회의방 정보를 찾을 수 없습니다.')
-            navigate('/')
-            return
+            console.log('⚠️ 호스트의 currentRoom이 없음 - 계속 진행')
+            // 호스트 연결이 끊어졌을 수 있으므로 회의방 재생성하지 않고 기다림
           }
         } else {
-          // 참여자인 경우 방에 입장
-          const result = await joinRoom(roomId, state.userName)
-          if (!result.success) {
-            toast.error(result.error || '회의방 참여에 실패했습니다.')
-            navigate('/')
-            return
+          console.log('👥 참여자 모드 - 회의방 참여 시도')
+          // 참여자인 경우: 방에 입장 시도
+          if (!currentRoom || currentRoom.id !== roomId) {
+            console.log('🔄 회의방 참여 시도:', { roomId, userName: state.userName })
+            const result = await joinRoom(roomId, state.userName)
+            console.log('🔍 참여 결과:', result)
+            
+            if (!result.success) {
+              console.error('❌ 회의방 참여 실패:', result.error)
+              toast.error(result.error || '회의방 참여에 실패했습니다.')
+              // 즉시 홈으로 이동하지 않고 재시도 기회 제공
+              setTimeout(() => {
+                console.log('🔄 5초 후 홈으로 이동...')
+                navigate('/')
+              }, 5000)
+              return
+            }
+            console.log('✅ 회의방 참여 성공')
+          } else {
+            console.log('✅ 이미 회의방에 참여됨')
           }
         }
       } catch (error) {
-        console.error('회의방 초기화 오류:', error)
+        console.error('❌ 회의방 초기화 예외:', error)
         toast.error('회의방 연결에 실패했습니다.')
-        navigate('/')
+        // 3초 후 홈으로 이동
+        setTimeout(() => {
+          navigate('/')
+        }, 3000)
       }
     }
 

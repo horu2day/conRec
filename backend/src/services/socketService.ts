@@ -12,6 +12,7 @@
 import { Server as SocketIOServer } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import { Room } from '../models/Room';
+import { storageService } from '../storage/storageService';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
 
@@ -93,18 +94,27 @@ class SocketService {
           // Socket을 룸에 조인
           socket.join(roomId);
 
-          // MongoDB에 회의방 정보 저장
+          // Storage Service에 회의방 정보 저장
           try {
-            const meetingRoom = new Room({
+            const storageRoom = {
               id: roomId,
               hostId,
-              participants: [hostParticipant],
-              status: 'waiting',
-              createdAt: new Date()
-            });
-            await meetingRoom.save();
-          } catch (dbError) {
-            logger.warn('MongoDB 저장 실패 (계속 진행):', dbError);
+              participants: [{
+                id: hostId,
+                name: data.hostName,
+                isHost: true,
+                joinedAt: new Date(),
+                microphoneEnabled: true,
+                recordingStatus: 'idle' as const
+              }],
+              status: 'waiting' as const,
+              createdAt: new Date(),
+              maxParticipants: 10
+            };
+            await storageService.createRoom(storageRoom);
+            logger.info(`Storage Service에 회의방 저장: ${roomId}`);
+          } catch (storageError) {
+            logger.warn('Storage Service 저장 실패 (계속 진행):', storageError);
           }
 
           logger.info(`회의방 생성: ${roomId}, 호스트: ${data.hostName}`);
@@ -130,7 +140,31 @@ class SocketService {
       // 회의방 참여
       socket.on('join-room', async (data: { roomId: string; userName: string }, callback) => {
         try {
-          const room = this.rooms.get(data.roomId);
+          let room = this.rooms.get(data.roomId);
+          
+          // 메모리에 방이 없으면 Storage Service에서 조회
+          if (!room) {
+            try {
+              const storageRoom = await storageService.findRoomById(data.roomId);
+              if (storageRoom && storageRoom.status !== 'ended') {
+                // Storage Service에서 방을 찾았으면 메모리에 복원
+                room = {
+                  id: storageRoom.id,
+                  hostId: storageRoom.hostId,
+                  participants: new Map(),
+                  status: storageRoom.status as 'waiting' | 'recording' | 'paused' | 'ended',
+                  createdAt: storageRoom.createdAt,
+                  recordingDuration: 0
+                };
+                
+                // 기존 참여자들을 메모리에 복원 (단, 현재 연결된 소켓이 없으므로 스킵)
+                this.rooms.set(data.roomId, room);
+                logger.info(`Storage Service에서 회의방 복원: ${data.roomId}`);
+              }
+            } catch (storageError) {
+              logger.error('Storage Service 조회 실패:', storageError);
+            }
+          }
           
           if (!room) {
             callback({
@@ -171,6 +205,23 @@ class SocketService {
 
           // Socket을 룸에 조인
           socket.join(data.roomId);
+          
+          // Storage Service에도 참여자 추가
+          try {
+            await storageService.updateRoom(data.roomId, {
+              participants: Array.from(room.participants.values()).map(p => ({
+                id: p.id,
+                name: p.name,
+                isHost: p.isHost,
+                joinedAt: p.joinedAt,
+                microphoneEnabled: true,
+                recordingStatus: p.recordingStatus
+              }))
+            });
+            logger.info(`Storage Service에 참여자 추가: ${data.userName} -> ${data.roomId}`);
+          } catch (storageError) {
+            logger.warn('Storage Service 참여자 추가 실패 (계속 진행):', storageError);
+          }
 
           // 다른 참여자들에게 새 참여자 알림
           socket.to(data.roomId).emit('participant-joined', {

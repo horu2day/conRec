@@ -2,18 +2,18 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import { createServer } from 'http'
-import { config } from '@/config'
-import { logger } from '@/utils/logger'
+import { config } from './config/index'
+import { logger } from './utils/logger'
 import { 
   errorHandler, 
   notFoundHandler 
-} from '@/middleware/errorHandler'
+} from './middleware/errorHandler'
 import { 
   addRequestInfo, 
   requestLogger, 
   detailedLogger, 
   slowRequestWarning 
-} from '@/middleware/logger'
+} from './middleware/logger'
 
 // Express 앱 생성
 const app = express()
@@ -106,7 +106,7 @@ app.use(notFoundHandler)
 app.use(errorHandler)
 
 // Socket.IO 서비스 초기화
-import { SocketService } from '@/services/socketService'
+import { SocketService } from './services/socketService'
 const socketService = new SocketService(httpServer)
 
 logger.info('Socket.IO service initialized')

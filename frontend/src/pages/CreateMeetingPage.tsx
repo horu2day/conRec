@@ -74,8 +74,27 @@ const CreateMeetingPage = () => {
       return
     }
     
+    // 백엔드 서버 상태 먼저 확인
     try {
+      const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
+      const healthCheck = await fetch(`${backendUrl}/health`)
+      if (!healthCheck.ok) {
+        toast.error('백엔드 서버가 실행되지 않았습니다. 서버를 먼저 실행해주세요.')
+        return
+      }
+    } catch (error) {
+      toast.error('백엔드 서버에 연결할 수 없습니다. simple-server.js를 실행해주세요.')
+      console.error('백엔드 서버 확인 실패:', error)
+      return
+    }
+    
+    try {
+      console.log('회의방 생성 시작:', formData.hostName)
       const result = await createRoom(formData.hostName)
+      console.log('회의방 생성 결과:', result)
+      console.log('result.success:', result.success)
+      console.log('result.roomId:', result.roomId)
+      console.log('result.error:', result.error)
       
       if (result.success && result.roomId) {
         toast.success('회의방이 생성되었습니다!')
@@ -89,11 +108,24 @@ const CreateMeetingPage = () => {
           }
         })
       } else {
-        toast.error(result.error || '회의방 생성에 실패했습니다.')
+        const errorMsg = result.error || '회의방 생성에 실패했습니다.'
+        console.error('회의방 생성 실패:', errorMsg)
+        console.error('전체 응답 객체:', JSON.stringify(result, null, 2))
+        toast.error(errorMsg)
       }
     } catch (error) {
-      console.error('회의방 생성 실패:', error)
-      toast.error('회의방 생성에 실패했습니다. 다시 시도해주세요.')
+      console.error('회의방 생성 예외:', error)
+      if (error instanceof Error) {
+        if (error.message.includes('시간 초과')) {
+          toast.error('서버 응답 시간이 초과되었습니다. 백엔드 서버를 확인해주세요.')
+        } else if (error.message.includes('연결되지 않았습니다')) {
+          toast.error('서버에 연결되지 않았습니다. 잠시 후 다시 시도해주세요.')
+        } else {
+          toast.error(`회의방 생성 오류: ${error.message}`)
+        }
+      } else {
+        toast.error('알 수 없는 오류가 발생했습니다. 다시 시도해주세요.')
+      }
     }
   }
 

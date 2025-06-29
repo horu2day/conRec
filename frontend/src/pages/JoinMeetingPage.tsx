@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Users, AlertCircle, CheckCircle, Sparkles, LogIn, Shield } from 'lucide-react'
 import useMeetingStore from '../stores/meetingStore'
+import { apiService } from '../services/apiService'
 import toast from 'react-hot-toast'
 
 const JoinMeetingPage = () => {
@@ -81,10 +82,24 @@ const JoinMeetingPage = () => {
     setRoomStatus('checking')
     
     try {
-      // 실제 구현에서는 서버에 room 상태 확인 API가 필요
-      // 현재는 기본적으로 valid로 처리 (실제 검증은 joinRoom에서)
-      await new Promise(resolve => setTimeout(resolve, 500))
-      setRoomStatus('valid')
+      // HTTP API로 실제 방 존재 확인
+      const response = await apiService.getRoomInfo(roomId)
+      
+      if (response.success && response.data?.room) {
+        const room = response.data.room
+        
+        // 방 상태에 따른 처리
+        if (room.status === 'ended') {
+          setRoomStatus('ended')
+        } else if (room.participants.length >= room.maxParticipants) {
+          setRoomStatus('invalid')
+          toast.error('회의방이 가득 찼습니다.')
+        } else {
+          setRoomStatus('valid')
+        }
+      } else {
+        setRoomStatus('invalid')
+      }
       
     } catch (error) {
       console.error('방 상태 확인 실패:', error)
@@ -111,9 +126,45 @@ const JoinMeetingPage = () => {
     }
     
     try {
+      console.log('🔍 참여자 입장 시도:', {
+        roomId: formData.roomId,
+        userName: formData.userName,
+        isConnected: isConnected
+      })
+      
+      // 1단계: HTTP API로 방 유효성 재확인
+      const roomCheckResponse = await apiService.getRoomInfo(formData.roomId)
+      console.log('🔍 HTTP API 방 확인 결과:', roomCheckResponse)
+      
+      if (!roomCheckResponse.success || !roomCheckResponse.data?.room) {
+        setRoomStatus('invalid')
+        toast.error('존재하지 않는 회의방입니다.')
+        console.error('❌ HTTP API 방 확인 실패')
+        return
+      }
+      
+      const room = roomCheckResponse.data.room
+      console.log('✅ HTTP API 방 확인 성공:', room)
+      
+      if (room.status === 'ended') {
+        setRoomStatus('ended')
+        toast.error('종료된 회의방입니다.')
+        return
+      }
+      
+      if (room.participants.length >= room.maxParticipants) {
+        setRoomStatus('invalid')
+        toast.error('회의방이 가득 찼습니다.')
+        return
+      }
+      
+      // 2단계: Socket.io로 실제 참여
+      console.log('🔍 Socket.io 참여 시도...')
       const result = await joinRoom(formData.roomId, formData.userName)
+      console.log('🔍 Socket.io 참여 결과:', result)
       
       if (result.success) {
+        console.log('✅ 참여 성공!')
         toast.success('회의에 성공적으로 참여했습니다!')
         
         // 회의방으로 이동
@@ -124,7 +175,8 @@ const JoinMeetingPage = () => {
           }
         })
       } else {
-        // 구체적인 오류 메시지 표시
+        console.error('❌ Socket.io 참여 실패:', result.error)
+        // Socket.io 참여 실패 시 구체적인 오류 메시지 표시
         if (result.error?.includes('존재하지 않는')) {
           setRoomStatus('invalid')
         } else if (result.error?.includes('종료된')) {
@@ -136,7 +188,7 @@ const JoinMeetingPage = () => {
         }
       }
     } catch (error) {
-      console.error('회의 참여 실패:', error)
+      console.error('❌ 회의 참여 예외:', error)
       toast.error('회의 참여에 실패했습니다. 다시 시도해주세요.')
     }
   }

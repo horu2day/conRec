@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import { Mic, MicOff, Users, Clock, Settings, LogOut, Copy, Check, Zap, Shield, AlertCircle } from 'lucide-react'
 import useMeetingStore from '../stores/meetingStore'
+import useMicrophonePermission from '../hooks/useMicrophonePermission'
+import MicrophonePermissionModal from '../components/permissions/MicrophonePermissionModal'
+import MicrophonePermissionIndicator from '../components/permissions/MicrophonePermissionIndicator'
 import toast from 'react-hot-toast'
 
 interface LocationState {
@@ -46,6 +49,19 @@ const MeetingRoomPage = () => {
 
   const [isMicrophoneEnabled, setIsMicrophoneEnabled] = useState(true)
   const [meetingDuration, setMeetingDuration] = useState(0)
+  const [showPermissionModal, setShowPermissionModal] = useState(false)
+  
+  // 마이크 권한 관리
+  const {
+    permissionState,
+    stream: microphoneStream,
+    error: permissionError,
+    hasPermission,
+    needsPermission,
+    canRequest,
+    requestPermission,
+    stopStream
+  } = useMicrophonePermission()
 
   // 초기화 및 연결
   useEffect(() => {
@@ -182,6 +198,13 @@ const MeetingRoomPage = () => {
       return
     }
 
+    // 마이크 권한 확인
+    if (needsPermission || !hasPermission) {
+      console.log('🎤 마이크 권한이 필요함, 모달 표시')
+      setShowPermissionModal(true)
+      return
+    }
+
     try {
       if (isRecording) {
         const result = await stopRecording()
@@ -200,10 +223,34 @@ const MeetingRoomPage = () => {
     }
   }
 
-  const handleMicrophoneToggle = () => {
+  const handleMicrophoneToggle = async () => {
+    // 권한이 없으면 먼저 권한 요청
+    if (!hasPermission && canRequest) {
+      setShowPermissionModal(true)
+      return
+    }
+
     setIsMicrophoneEnabled(!isMicrophoneEnabled)
-    // TODO: 실제 마이크 제어 및 다른 참여자들에게 알림
-    toast.success(isMicrophoneEnabled ? '마이크가 꺼졌습니다.' : '마이크가 켜졌습니다.')
+    
+    if (isMicrophoneEnabled) {
+      // 마이크 끄기 - 스트림 정지
+      stopStream()
+      toast.success('마이크가 꺼졌습니다.')
+    } else {
+      // 마이크 켜기 - 권한 요청 또는 스트림 재시작
+      try {
+        const stream = await requestPermission()
+        if (stream) {
+          toast.success('마이크가 켜졌습니다.')
+        } else {
+          toast.error('마이크 권한이 필요합니다.')
+          setIsMicrophoneEnabled(false) // 원래 상태로 복구
+        }
+      } catch (error) {
+        toast.error('마이크 활성화에 실패했습니다.')
+        setIsMicrophoneEnabled(false) // 원래 상태로 복구
+      }
+    }
   }
 
   const handleCopyLink = async () => {
@@ -316,6 +363,12 @@ const MeetingRoomPage = () => {
 
               {/* 컨트롤 버튼들 */}
               <div className="flex items-center space-x-3">
+                {/* 마이크 권한 상태 인디케이터 */}
+                <MicrophonePermissionIndicator 
+                  onRequestPermission={() => setShowPermissionModal(true)}
+                  className="hidden md:block"
+                />
+                
                 <button className="p-3 hover:bg-white/10 rounded-xl transition-all duration-300 hover:scale-105">
                   <Settings className="w-5 h-5" />
                 </button>
@@ -366,12 +419,23 @@ const MeetingRoomPage = () => {
                   {/* 메인 녹음 버튼 - 호스트만 */}
                   {storeIsHost && (
                     <div className="mb-12">
+                      {/* 권한 상태에 따른 안내 메시지 */}
+                      {needsPermission && (
+                        <div className="mb-6 p-4 bg-yellow-500/20 border border-yellow-500/30 rounded-2xl">
+                          <p className="text-yellow-400 text-center font-medium">
+                            🎤 녹음을 시작하려면 마이크 권한이 필요합니다
+                          </p>
+                        </div>
+                      )}
+                      
                       <button
                         onClick={handleRecordingToggle}
                         disabled={isLoading}
                         className={`group relative w-48 h-48 rounded-full flex items-center justify-center mx-auto transition-all duration-500 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed ${
                           isRecording 
                             ? 'bg-gradient-to-br from-red-500 to-orange-500 shadow-red-500/50 shadow-2xl' 
+                            : needsPermission
+                            ? 'bg-gradient-to-br from-yellow-600 to-orange-600 hover:from-yellow-500 hover:to-orange-500 shadow-xl'
                             : 'bg-gradient-to-br from-gray-600 to-gray-700 hover:from-purple-500 hover:to-blue-500 shadow-xl'
                         }`}
                       >
@@ -393,7 +457,12 @@ const MeetingRoomPage = () => {
                       </button>
                       
                       <p className="text-lg text-gray-300 mt-6">
-                        {isRecording ? '클릭하여 녹음 중지' : '클릭하여 녹음 시작'}
+                        {isRecording 
+                          ? '클릭하여 녹음 중지' 
+                          : needsPermission 
+                          ? '클릭하여 마이크 권한 허용 후 녹음 시작'
+                          : '클릭하여 녹음 시작'
+                        }
                       </p>
                     </div>
                   )}
@@ -403,12 +472,19 @@ const MeetingRoomPage = () => {
                     <button
                       onClick={handleMicrophoneToggle}
                       className={`group flex items-center space-x-3 px-8 py-4 rounded-2xl font-semibold transition-all duration-300 hover:scale-105 ${
-                        isMicrophoneEnabled 
+                        isMicrophoneEnabled && hasPermission
                           ? 'bg-white/10 hover:bg-white/20 border border-white/20' 
+                          : !hasPermission
+                          ? 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600'
                           : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
                       }`}
                     >
-                      {isMicrophoneEnabled ? (
+                      {!hasPermission ? (
+                        <>
+                          <MicOff className="w-5 h-5" />
+                          <span>권한 필요</span>
+                        </>
+                      ) : isMicrophoneEnabled ? (
                         <>
                           <Mic className="w-5 h-5" />
                           <span>마이크 켜짐</span>
@@ -553,6 +629,23 @@ const MeetingRoomPage = () => {
           </div>
         </div>
       </main>
+      
+      {/* 마이크 권한 모달 */}
+      <MicrophonePermissionModal
+        isOpen={showPermissionModal}
+        onClose={() => setShowPermissionModal(false)}
+        onPermissionGranted={(stream) => {
+          console.log('✅ 권한 허용됨, 스트림 획득:', stream)
+          setIsMicrophoneEnabled(true)
+          setShowPermissionModal(false)
+          toast.success('마이크 권한이 허용되었습니다!')
+        }}
+        onPermissionDenied={(reason) => {
+          console.log('❌ 권한 거부됨:', reason)
+          setIsMicrophoneEnabled(false)
+          toast.error('마이크 권한이 필요합니다.')
+        }}
+      />
     </div>
   )
 }

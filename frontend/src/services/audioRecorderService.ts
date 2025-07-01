@@ -417,7 +417,13 @@ class AudioRecorderService {
     return this.state.finalBlob
   }
 
-  // 브라우저 호환성 체크
+  // 브라우저 지원 여부 확인 (인스턴스 메서드)
+  public isSupported(): boolean {
+    const support = AudioRecorderService.checkBrowserSupport()
+    return support.supported
+  }
+
+  // 브라우저 호환성 체크 (정적 메서드)
   public static checkBrowserSupport(): {
     supported: boolean
     features: {

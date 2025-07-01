@@ -143,21 +143,41 @@ export const useMeetingStore = create<MeetingState & MeetingActions>()(
 
       // 연결 관리
       connect: () => {
-        // 이미 연결되어 있으면 바로 성공 처리
+        console.log('🔌 meetingStore.connect() 호출, 현재 연결 상태:', socketService.isConnected())
+        
+        // 이미 연결되어 있더라도 이벤트 리스너를 다시 등록해야 함
+        console.log('🔄 Socket.io 이벤트 리스너 설정 시작...')
+        
         if (socketService.isConnected()) {
+          console.log('✅ 이미 Socket.io 연결됨 - 이벤트 리스너만 등록')
           set({
             isConnected: true,
             connectionError: null,
             isReconnecting: false
           })
-          get().addNotification('success', '서버에 연결되었습니다.')
-          return
+          // 이벤트 리스너 등록을 위해 아래 코드 계속 실행
+        } else {
+          console.log('🔄 Socket.io 연결 시도 중...')
+          set({ isReconnecting: true, connectionError: null })
         }
         
-        set({ isReconnecting: true, connectionError: null })
+        // 기존 이벤트 리스너 정리 (중복 등록 방지)
+        console.log('🧨 기존 이벤트 리스너 정리...')
+        socketService.off('connect')
+        socketService.off('disconnect')
+        socketService.off('connect_error')
+        socketService.off('participant-joined')
+        socketService.off('participant-left')
+        socketService.off('recording-started')
+        socketService.off('recording-stopped')
+        socketService.off('room-ended')
+        socketService.off('error')
         
         // Socket.io 이벤트 리스너 설정
+        console.log('🎯 Socket.io 이벤트 리스너 등록 시작...')
+        
         socketService.on('connect', () => {
+          console.log('✅ Socket.io connect 이벤트 발생')
           set({
             isConnected: true,
             connectionError: null,
@@ -185,23 +205,72 @@ export const useMeetingStore = create<MeetingState & MeetingActions>()(
         })
 
         // 실시간 이벤트 핸들러
+        console.log('🎯 participant-joined 이벤트 리스너 등록')
         socketService.on('participant-joined', (data) => {
-          get().updateRoomInfo(data.roomInfo)
+          console.log('🔔 participant-joined 이벤트 수신:', {
+            data,
+            participant: data.participant,
+            room: data.room,
+            roomInfo: data.roomInfo,
+            현재방정보: get().currentRoom
+          })
+          
+          // room 또는 roomInfo가 있으면 회의방 정보 업데이트
+          const roomData = data.roomInfo || data.room
+          if (roomData) {
+            console.log('🔄 방 정보 업데이트 시도:', roomData)
+            get().updateRoomInfo(roomData)
+          } else {
+            console.warn('⚠️ participant-joined 이벤트에 방 정보가 없음')
+          }
           get().addNotification('info', `${data.participant.name}님이 입장했습니다.`)
         })
 
         socketService.on('participant-left', (data) => {
-          get().updateRoomInfo(data.roomInfo)
-          get().addNotification('info', `${data.participantName}님이 퇴장했습니다.`)
+          console.log('🔔 participant-left 이벤트 수신:', {
+            data,
+            userId: data.userId,
+            userName: data.userName,
+            room: data.room,
+            roomInfo: data.roomInfo,
+            현재방정보: get().currentRoom
+          })
+          
+          // room 또는 roomInfo가 있으면 회의방 정보 업데이트
+          const roomData = data.roomInfo || data.room
+          if (roomData) {
+            console.log('🔄 방 정보 업데이트 시도 (left):', roomData)
+            get().updateRoomInfo(roomData)
+          } else {
+            console.warn('⚠️ participant-left 이벤트에 방 정보가 없음')
+          }
+          get().addNotification('info', `${data.userName}님이 퇴장했습니다.`)
         })
 
         socketService.on('recording-started', (data) => {
-          get().updateRoomInfo(data.roomInfo)
+          console.log('🔔 recording-started 이벤트 수신:', {
+            data,
+            startedAt: data.startedAt,
+            timestamp: data.timestamp,
+            roomInfo: data.roomInfo,
+            현재녹음상태: get().isRecording
+          })
+          
+          // 방 정보 업데이트
+          if (data.roomInfo) {
+            console.log('🔄 녹음 시작 - 방 정보 업데이트')
+            get().updateRoomInfo(data.roomInfo)
+          }
+          
+          // 녹음 상태 업데이트
+          const startTime = new Date(data.startedAt || data.timestamp)
           set({
             isRecording: true,
-            recordingStartTime: new Date(data.timestamp),
+            recordingStartTime: startTime,
             recordingDuration: 0
           })
+          
+          console.log('✅ 녹음 상태 업데이트 완료 - 녹음 시작됨')
           get().addNotification('success', '녹음이 시작되었습니다.')
 
           // 개별 녹음 시작
@@ -209,12 +278,29 @@ export const useMeetingStore = create<MeetingState & MeetingActions>()(
         })
 
         socketService.on('recording-stopped', (data) => {
-          get().updateRoomInfo(data.roomInfo)
+          console.log('🔔 recording-stopped 이벤트 수신:', {
+            data,
+            stoppedAt: data.stoppedAt,
+            timestamp: data.timestamp,
+            duration: data.duration,
+            roomInfo: data.roomInfo,
+            현재녹음상태: get().isRecording
+          })
+          
+          // 방 정보 업데이트
+          if (data.roomInfo) {
+            console.log('🔄 녹음 중지 - 방 정보 업데이트')
+            get().updateRoomInfo(data.roomInfo)
+          }
+          
+          // 녹음 상태 업데이트
           set({
             isRecording: false,
             isPaused: false,
-            recordingDuration: data.duration
+            recordingDuration: data.duration || get().recordingDuration
           })
+          
+          console.log('✅ 녹음 상태 업데이트 완료 - 녹음 중지됨')
           get().addNotification('info', '녹음이 중지되었습니다.')
 
           // 개별 녹음 중지
@@ -433,52 +519,141 @@ export const useMeetingStore = create<MeetingState & MeetingActions>()(
 
       // 개별 녹음 관리 (내부 메서드)
       startIndividualRecording: async () => {
+        console.log('🎤 startIndividualRecording 시작')
+        
         try {
-          const { audioConfig } = get()
+          const { audioConfig, participantName, roomId } = get()
+          console.log('📋 녹음 시작 정보:', {
+            participantName,
+            roomId,
+            audioConfig,
+            audioRecorder: !!audioRecorder
+          })
           
+          // AudioRecorder 인스턴스 생성 또는 재사용
           if (!audioRecorder) {
+            console.log('🔧 새로운 AudioRecorderService 인스턴스 생성')
             audioRecorder = new AudioRecorderService(audioConfig)
+          } else {
+            console.log('♻️ 기존 AudioRecorderService 인스턴스 재사용')
           }
 
-          // 권한 확인
-          const hasPermission = await audioRecorder.requestPermission()
-          if (!hasPermission) {
-            get().addNotification('error', '마이크 권한이 필요합니다.')
+          // 브라우저 지원 확인
+          console.log('🔍 브라우저 지원 확인...')
+          const isSupported = audioRecorder.isSupported()
+          if (!isSupported) {
+            console.error('❌ 브라우저가 오디오 녹음을 지원하지 않음')
+            get().addNotification('error', '이 브라우저는 오디오 녹음을 지원하지 않습니다.')
             return
           }
+          console.log('✅ 브라우저 오디오 녹음 지원 확인됨')
+
+          // 마이크 권한 요청
+          console.log('🎤 마이크 권한 요청...')
+          const hasPermission = await audioRecorder.requestPermission()
+          console.log('🔐 마이크 권한 결과:', hasPermission)
+          
+          if (!hasPermission) {
+            console.error('❌ 마이크 권한 거부됨')
+            get().addNotification('error', '마이크 권한이 필요합니다. 브라우저 설정에서 마이크 권한을 허용해주세요.')
+            return
+          }
+          console.log('✅ 마이크 권한 획득 성공')
 
           // 녹음 시작
+          console.log('▶️ 실제 녹음 시작 시도...')
           const started = await audioRecorder.startRecording()
-          if (!started) {
+          console.log('🎯 녹음 시작 결과:', started)
+          
+          if (started) {
+            console.log('🎉 개별 녹음 시작 성공!')
+            get().addNotification('success', '개별 녹음이 시작되었습니다.')
+          } else {
+            console.error('❌ 개별 녹음 시작 실패')
             get().addNotification('error', '개별 녹음 시작에 실패했습니다.')
           }
+          
         } catch (error) {
-          console.error('개별 녹음 시작 오류:', error)
-          get().addNotification('error', '개별 녹음 시작에 실패했습니다.')
+          console.error('💥 개별 녹음 시작 중 예외 발생:', {
+            error,
+            message: error instanceof Error ? error.message : '알 수 없는 오류',
+            stack: error instanceof Error ? error.stack : undefined
+          })
+          
+          const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.'
+          get().addNotification('error', `개별 녹음 시작 실패: ${errorMessage}`)
         }
       },
 
       stopIndividualRecording: async () => {
+        console.log('🛑 stopIndividualRecording 시작')
+        
         try {
-          if (audioRecorder) {
-            const blob = await audioRecorder.stopRecording()
-            if (blob) {
-              set({ audioBlob: blob })
-              get().addNotification('success', '개별 녹음 파일이 생성되었습니다.')
-              
-              // 서버로 파일 업로드
-              await get().uploadAudioFile(blob)
-            }
+          const { participantName, roomId } = get()
+          console.log('📋 녹음 중지 정보:', {
+            participantName,
+            roomId,
+            audioRecorder: !!audioRecorder
+          })
+          
+          if (!audioRecorder) {
+            console.warn('⚠️ audioRecorder가 없음 - 녹음이 시작되지 않았거나 이미 중지됨')
+            get().addNotification('warning', '녹음이 시작되지 않았습니다.')
+            return
           }
+
+          console.log('⏹️ 녹음 중지 시도...')
+          const blob = await audioRecorder.stopRecording()
+          console.log('📁 녹음 중지 결과:', {
+            blob: !!blob,
+            blobSize: blob ? blob.size : 0,
+            blobType: blob ? blob.type : 'N/A'
+          })
+          
+          if (blob && blob.size > 0) {
+            console.log('💾 녹음 파일 생성 성공, 상태 업데이트')
+            set({ audioBlob: blob })
+            get().addNotification('success', '개별 녹음이 완료되었습니다.')
+            
+            // 서버로 파일 업로드
+            console.log('☁️ 서버 업로드 시작...')
+            const uploadResult = await get().uploadAudioFile(blob)
+            console.log('📤 업로드 결과:', uploadResult)
+            
+          } else {
+            console.warn('⚠️ 녹음 파일이 비어있거나 생성되지 않음')
+            get().addNotification('warning', '녹음 파일이 생성되지 않았습니다.')
+          }
+          
         } catch (error) {
-          console.error('개별 녹음 중지 오류:', error)
-          get().addNotification('error', '개별 녹음 중지에 실패했습니다.')
+          console.error('💥 개별 녹음 중지 중 예외 발생:', {
+            error,
+            message: error instanceof Error ? error.message : '알 수 없는 오류',
+            stack: error instanceof Error ? error.stack : undefined
+          })
+          
+          const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.'
+          get().addNotification('error', `개별 녹음 중지 실패: ${errorMessage}`)
         }
       },
 
       // 상태 업데이트
       updateRoomInfo: (room: RoomInfo) => {
+        const currentState = get()
+        console.log('📊 updateRoomInfo 호출:', {
+          기존_참여자수: currentState.currentRoom?.participants?.length || 0,
+          새로운_참여자수: room.participants?.length || 0,
+          기존_참여자_목록: currentState.currentRoom?.participants?.map(p => p.name) || [],
+          새로운_참여자_목록: room.participants?.map(p => p.name) || [],
+          전체_방_정보: room
+        })
+        
+        // 상태 업데이트 전후 비교
         set({ currentRoom: room })
+        
+        console.log('🔄 상태 업데이트 완료:', {
+          업데이트_후_참여자수: get().currentRoom?.participants?.length || 0
+        })
       },
 
       addParticipant: (participant: ParticipantInfo) => {

@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage'
 import CreateMeetingPage from './pages/CreateMeetingPage'
 import JoinMeetingPage from './pages/JoinMeetingPage'
 import MeetingRoomPage from './pages/MeetingRoomPage'
+import UploadDebugPage from './pages/UploadDebugPage'
 import NotFoundPage from './pages/NotFoundPage'
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
           <Route path="/join" element={<JoinMeetingPage />} />
           <Route path="/join/:roomId" element={<JoinMeetingPage />} />
           <Route path="/meeting/:roomId" element={<MeetingRoomPage />} />
+          <Route path="/debug" element={<UploadDebugPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
         

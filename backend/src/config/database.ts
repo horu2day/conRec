@@ -2,6 +2,10 @@ import mongoose from 'mongoose'
 import { config } from '@/config'
 import { logger } from '@/utils/logger'
 
+// 모델들을 미리 import하여 스키마 등록
+import { Room } from '@/models/Room'
+import { RecordingFile } from '@/models/RecordingFile'
+
 // MongoDB 연결 옵션
 const mongooseOptions: mongoose.ConnectOptions = {
   // 연결 풀 설정
@@ -18,11 +22,14 @@ const mongooseOptions: mongoose.ConnectOptions = {
   retryWrites: true,
   retryReads: true,
   
-  // 압축 설정
+  // 압축 설정 (사용 가능한 경우만)
   compressors: ['zstd', 'zlib'],
   
   // 읽기 선호도
   readPreference: 'primary',
+  
+  // 새로운 URL parser 사용
+  family: 4, // IPv4 사용
 }
 
 // 연결 이벤트 핸들러
@@ -69,8 +76,8 @@ export const connectToDatabase = async (): Promise<void> => {
     // 이벤트 핸들러 설정
     setupEventHandlers()
 
-    // 개발 환경에서 디버그 모드 활성화
-    if (config.isDevelopment) {
+    // 개발 환경에서만 디버그 모드 활성화 (로그 레벨이 DEBUG일 때만)
+    if (config.isDevelopment && config.LOG_LEVEL === 'debug') {
       mongoose.set('debug', (collection, method, query, doc) => {
         logger.debug(`MongoDB: ${collection}.${method}`, {
           query: JSON.stringify(query),
@@ -200,14 +207,24 @@ export const ensureIndexes = async (): Promise<void> => {
     logger.info('🔍 Creating database indexes...')
     
     // Room 모델 인덱스
-    await mongoose.model('Room').createIndexes()
+    await Room.createIndexes()
+    logger.info('✅ Room indexes created successfully')
     
     // RecordingFile 모델 인덱스
-    await mongoose.model('RecordingFile').createIndexes()
+    await RecordingFile.createIndexes()
+    logger.info('✅ RecordingFile indexes created successfully')
     
     logger.info('✅ Database indexes created successfully')
   } catch (error) {
-    logger.error('❌ Error creating database indexes:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorStack = error instanceof Error ? error.stack : undefined
+    
+    logger.error('❌ Error creating database indexes:', {
+      message: errorMessage,
+      stack: errorStack,
+      name: error instanceof Error ? error.name : 'Unknown'
+    })
+    
     throw error
   }
 }

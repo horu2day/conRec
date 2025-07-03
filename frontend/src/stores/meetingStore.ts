@@ -77,6 +77,10 @@ export interface MeetingActions {
   stopRecording: () => Promise<{ success: boolean; blob?: Blob; error?: string }>
   pauseRecording: () => Promise<{ success: boolean; error?: string }>
   resumeRecording: () => Promise<{ success: boolean; error?: string }>
+  
+  // 개별 녹음 제어 (내부 메서드)
+  startIndividualRecording: () => Promise<void>
+  stopIndividualRecording: () => Promise<void>
 
   // 상태 업데이트
   updateRoomInfo: (room: RoomInfo) => void

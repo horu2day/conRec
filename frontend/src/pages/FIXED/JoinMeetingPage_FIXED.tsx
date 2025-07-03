@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Users, AlertCircle, CheckCircle, Sparkles, LogIn, Shield } from 'lucide-react'
-import useMeetingStore from '../stores/meetingStore'
+import useMeetingStore from '../../stores/meetingStore'
 import toast from 'react-hot-toast'
 
 const JoinMeetingPage = () => {

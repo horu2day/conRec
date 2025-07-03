@@ -15,6 +15,7 @@ import { Room } from '../models/Room';
 import { storageService } from '../storage/storageService';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
+import { RecordingStatus } from '../types/index';
 
 interface ParticipantData {
   id: string;
@@ -23,6 +24,21 @@ interface ParticipantData {
   joinedAt: Date;
   socketId: string;
   recordingStatus: 'idle' | 'recording' | 'paused' | 'stopped';
+}
+
+// Storage Service용 상태 매핑 함수
+function mapToStorageStatus(status: ParticipantData['recordingStatus']): RecordingStatus {
+  switch (status) {
+    case 'idle':
+      return 'idle';
+    case 'recording':
+      return 'recording';
+    case 'paused':
+    case 'stopped':
+      return 'completed';
+    default:
+      return 'idle';
+  }
 }
 
 interface RoomData {
@@ -215,7 +231,7 @@ class SocketService {
                 isHost: p.isHost,
                 joinedAt: p.joinedAt,
                 microphoneEnabled: true,
-                recordingStatus: p.recordingStatus
+                recordingStatus: mapToStorageStatus(p.recordingStatus)
               }))
             });
             logger.info(`Storage Service에 참여자 추가: ${data.userName} -> ${data.roomId}`);

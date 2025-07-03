@@ -160,11 +160,11 @@ export class UploadService {
       // FormData 확인
       console.log('🔍 FormData 내용 확인:');
       for (let [key, value] of formData.entries()) {
-        if (value instanceof File || value instanceof Blob) {
+        if (typeof value === 'object' && value && 'size' in value && 'type' in value) {
           console.log(`  ${key}:`, {
             name: (value as any).name || 'blob',
-            size: value.size,
-            type: value.type
+            size: (value as any).size,
+            type: (value as any).type
           });
         } else {
           console.log(`  ${key}:`, value);

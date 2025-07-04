@@ -23,6 +23,7 @@ services:
       dockerfile: Dockerfile
     container_name: conrec-backend
     restart: unless-stopped
+    command: ["npm", "start"]
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -46,7 +47,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${API_URL:-/api} # Nginx 프록시를 사용하므로 상대 경로로 변경
-        VITE_SOCKET_URL: ${SOCKET_URL:-/} # Nginx 프록시를 사용하므로 상대 경로로 변경
+        VITE_SOCKET_URL: ${SOCKET_URL:-/socket.io} # Nginx 프록시를 사용하므로 상대 경로로 변경
         VITE_MAX_PARTICIPANTS: 10
     container_name: conrec-frontend
     restart: unless-stopped

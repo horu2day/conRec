@@ -10,7 +10,7 @@
  */
 
 import { Server as SocketIOServer } from 'socket.io';
-import { Server as HTTPServer } from 'http';
+import { httpServer } from '../app';
 import { Room } from '../models/Room';
 import { storageService } from '../storage/storageService';
 import { v4 as uuidv4 } from 'uuid';
@@ -56,8 +56,8 @@ class SocketService {
   private rooms: Map<string, RoomData> = new Map();
   private userSocketMap: Map<string, string> = new Map(); // userId -> socketId
 
-  constructor(server: HTTPServer) {
-    this.io = new SocketIOServer(server, {
+  constructor() {
+    this.io = new SocketIOServer(httpServer, {
       cors: {
         origin: process.env.CORS_ORIGIN || "http://localhost:5173",
         methods: ["GET", "POST"],
@@ -294,7 +294,7 @@ class SocketService {
             participant.recordingStatus = 'recording';
           });
 
-          // 모든 참여자에게 녹음 시작 신호 전송
+          // 모든 참여자에게 녹��� 시작 신호 전송
           this.io.to(data.roomId).emit('recording-started', {
             timestamp: room.recordingStartTime,
             roomInfo: this.getRoomInfo(data.roomId)
@@ -502,5 +502,7 @@ class SocketService {
   }
 }
 
-export { SocketService }
-export type { ParticipantData, RoomData }
+const socketService = new SocketService();
+
+export { socketService, SocketService };
+export type { ParticipantData, RoomData };

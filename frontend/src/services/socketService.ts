@@ -71,8 +71,14 @@ class SocketService {
 
   constructor() {
     // 기본 환경변수에서 URL 가져오기
-    const serverUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000'
-    this.connect(serverUrl)
+    let serverUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
+    
+    // URL에 포함된 /socket.io 경로를 제거
+    if (serverUrl.endsWith('/socket.io')) {
+      serverUrl = serverUrl.slice(0, -'/socket.io'.length);
+    }
+
+    this.connect(serverUrl);
   }
 
   private connect(url: string): void {

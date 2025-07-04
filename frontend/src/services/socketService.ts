@@ -78,6 +78,7 @@ class SocketService {
   private connect(url: string): void {
     try {
       this.socket = io(url, {
+        path: '/socket.io',
         transports: ['websocket', 'polling'],
         timeout: 20000,
         reconnection: true,

@@ -96,8 +96,48 @@ app.get('/', (_req, res) => {
 import uploadRoutes from './routes/upload'
 import roomRoutes from './routes/rooms'
 
-app.use('/api/upload', uploadRoutes)
-app.use('/api/rooms', roomRoutes)
+import http from 'http';
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import { config } from './config';
+import { logger } from './utils/logger';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import roomRoutes from './routes/rooms';
+import uploadRoutes from './routes/upload';
+
+const app = express();
+const httpServer = http.createServer(app);
+
+// Middleware
+app.use(cors({
+  origin: config.CORS_ORIGIN,
+  credentials: true,
+}));
+app.use(helmet());
+app.use(morgan(config.NODE_ENV === 'development' ? 'dev' : 'combined', {
+  stream: {
+    write: (message: string) => logger.info(message.trim()),
+  },
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Health Check
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', message: 'Server is healthy' });
+});
+
+// Routes
+app.use('/api/rooms', roomRoutes);
+app.use('/api/upload', uploadRoutes);
+
+// Error Handler
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+export { app, httpServer };
 
 // 404 핸들러
 app.use(notFoundHandler)

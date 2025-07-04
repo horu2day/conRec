@@ -76,11 +76,16 @@ const CreateMeetingPage = () => {
     
     // 백엔드 서버 상태 먼저 확인
     try {
-      const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
-      const healthCheck = await fetch(`${backendUrl}/health`)
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+      // VITE_API_URL이 /api로 끝나는지 확인하여 health check 경로를 올바르게 설정
+      const healthCheckUrl = apiUrl.endsWith('/api')
+        ? `${apiUrl.substring(0, apiUrl.length - 4)}/api/health`
+        : `${apiUrl}/api/health`;
+      
+      const healthCheck = await fetch(healthCheckUrl);
       if (!healthCheck.ok) {
-        toast.error('백엔드 서버가 실행되지 않았습니다. 서버를 먼저 실행해주세요.')
-        return
+        toast.error('백엔드 서버가 실행되지 않았습니다. 서버를 먼저 실행해주세요.');
+        return;
       }
     } catch (error) {
       toast.error('백엔드 서버에 연결할 수 없습니다. simple-server.js를 실행해주세요.')
